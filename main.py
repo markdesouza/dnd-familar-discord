@@ -62,7 +62,7 @@ async def announce(text):
 
 @bot.event
 async def on_ready():
-    await announce(BOT_NAME + " enters the chat!")
+    await announce(BOT_NAME + " has entered the chat! (type '"+BOT_PREFIX+" help' for more info)")
 
 
 @bot.command(name=BOT_CMD, help="Talk to "+BOT_NAME)
@@ -70,7 +70,7 @@ async def baseCmd(context, action_text):
     action_text = context.message.content[len(BOT_PREFIX)+1:]
     match action_text:
         case "help":
-            return await reset(context)
+            return await help(context)
         case "reset":
             return await reset(context)
         case "save":
@@ -84,8 +84,17 @@ async def baseCmd(context, action_text):
 
 
 async def help(context):
-    # TODO
-    await context.send("Not implemented yet. Sorry :(")
+    await context.send("Commands:\n"+
+                       "    "+BOT_PREFIX+" help: show this message\n"+
+                       "    "+BOT_PREFIX+" save: save all interactions currently made with "+BOT_NAME+". Useful when ending a session.\n"+
+                       "    "+BOT_PREFIX+" reset: reset "+BOT_NAME+" to last saved state. Useful when starting a session or to undo negative interactions.\n"+
+                       "    "+BOT_PREFIX+" mute: prevent "+BOT_NAME+" from responding to interactions\n"+
+                       "    "+BOT_PREFIX+" help: allow "+BOT_NAME+" to responding to interactions\n"+
+                       "    "+BOT_PREFIX+" <interaction>: interact with "+BOT_NAME+"\n"+
+                       "\n"+
+                       "Interaction examples:\n"+
+                       "    "+BOT_PREFIX+" I pet "+BOT_NAME+"\n"+
+                       "    "+BOT_PREFIX+" I give "+BOT_NAME+" some cheese\n");
 
 
 async def reset(context):
@@ -115,7 +124,7 @@ async def unmute(context):
 async def interact(context, action_text):
     global muted
     global history
-    
+
     if muted:
         return
 
