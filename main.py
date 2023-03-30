@@ -16,12 +16,20 @@ def loadState():
     global MAX_MEMORY
     global CHAT_HISTORY_FILE
     global history
+    global ALIASES
 
     try:
         load_dotenv()
     except FileNotFoundError:
         print("Error: .env file not found. Please create one and try again.")
         exit(1)
+
+    DEBUG = os.getenv("DEBUG")
+    if (DEBUG == "true" or DEBUG == "True" or DEBUG == "TRUE"):
+        isDebug = True
+        debug("Debug mode enabled.")
+    else:
+        isDebug = False
 
     try:
         MAX_MEMORY_STR = os.getenv("MAX_MEMORY")
@@ -46,9 +54,20 @@ def loadState():
                 infile.close()
             except json.JSONDecodeError as exp:
                 print("Error could not parse chat history!\n"+exp.msg)
+    ALIASES = os.getenv("ALIAS")
+    if (ALIASES != None and len(ALIASES) > 0):
+        try:
+            ALIASES = json.loads(ALIASES)
+            debug("Aliases loaded as:",ALIASES)
+        except json.JSONDecodeError as exp:
+            print("Error could not parse aliases!\n"+exp.msg)
+            ALIASES = {}
+    else: 
+        debug("No aliases defined.")
+        ALIASES = {}
 
 muted = False
-isDebug = False
+isDebug = True
 loadState()
 BOT_NAME = os.getenv("BOT_NAME")
 BOT_PREFIX = "/"+BOT_NAME.lower()
@@ -157,27 +176,30 @@ async def debugHandler(context):
 async def interactionHandler(context, action_text):
     global muted
     global history
+    global ALIASES
 
     if muted:
         return
 
-    sender = context.message.author.display_name
     action_text = " " + action_text
+    sender = context.message.author.display_name
+    if sender in ALIASES:
+        debug("Alias found: replacing "+sender+" with "+ ALIASES[sender])
+        action_text = action_text.replace(" "+sender+" ", " "+ ALIASES[sender]+" ")
+        sender = ALIASES[sender]
     action_text = action_text.replace(" I ", " "+sender+" ")
     action_text = action_text.strip()
     action = {"role": "user", "content": action_text}
     messages = initialPrompt + history + [action]
-    print(messages)
-    print()
+    debug("AI request will be:", messages)
     async with context.typing():
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=messages,
         )
-        print(response)
+        debug("AI response is: ", response)
         history.append(action)
-        history.append(
-            {"role": "assistant", "content": response.choices[0].message.content})
+        history.append({"role": "assistant", "content": response.choices[0].message.content})
         
         if len(history) > MAX_MEMORY:
             history = history[-MAX_MEMORY:]
