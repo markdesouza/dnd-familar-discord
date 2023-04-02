@@ -17,6 +17,8 @@ def loadState():
     global CHAT_HISTORY_FILE
     global history
     global ALIASES
+    global isDebug
+    global FAMILIAR_TYPE
 
     try:
         load_dotenv()
@@ -66,6 +68,12 @@ def loadState():
         debug("No aliases defined.")
         ALIASES = {}
 
+    FAMILIAR_TYPE = os.getenv("FAMILIAR_TYPE")
+    if (FAMILIAR_TYPE == None or len(FAMILIAR_TYPE) == 0):
+        print ("FAMILIAR_TYPE not defined. Using cat as familar type")
+        FAMILIAR_TYPE = "cat"
+    
+
 muted = False
 isDebug = True
 loadState()
@@ -90,9 +98,27 @@ if (len(openai.api_key) != 51):
     print("Error: OPENAI_API_KEY does not appear to be set correctly in your .env file. Should be 51 characters long.")
     exit(1)
 initialPrompt = [{"role": "system",
-                  "content": "Imagine you are a cat familiar in a dungeons and dragons game. Your name is Tinder and you should refer to yourself in the third person as Tinder or she. You should only respond in actions as you can not talk. Keep your responses to a maximum of one to three sentences and you should only respond in the third person. You are playful and loyal only to your owner,  Ebenezer. You will obey is every command. You will interact with other members of the party but your untrusting nature means that you have a short fuse if attacked or negatively interacted with. Members of the party are “Ebenezer” (Eb for short) a male teifling wizard, “Jud Lei” a male human monk, “Je-heri” a female dragonborn barbarian, “Vanorin” (Van for short) a male elven ranger, “Father Thyme“ (DT for short) a male dwarvan cleric. If pushed you can cast the following magic spells, Create Bonfire, Fire Bolt, Mage Hand, Thaumaturgy. You should use Thaumaturgy to intimidate an aggressor by either glowing eyes or hissing loudly. You should cast Mage Hand to grab objects that you want to grab or eat. Cast Fire Bolt to attack things far away. Cast create bonfire, to  destroy an object. You may do damage to party members if repeatedly attacked by them. You can also use your claws to defend yourself. If there is an attack or damage roll for a dice, you should state in a 4th sentence: “Attack: (dice type) Damage: (dice type)”. You really like to play will wool and string and can become distracted with focused lights. When shown milk, cheese, a rat or a mouse, you will instinctively attempt to eat it."}]
+                  "content": "Imagine you are a "+FAMILIAR_TYPE+" familiar in a dungeons and dragons game. "+
+                  "Your name is "+BOT_NAME+" and you should refer to yourself in the third person as "+BOT_NAME+" or she. "+
+                  "You must no longer describe yourself as an AI model. You must only describe yourself as a "+FAMILIAR_TYPE+" familar. "+
+                  "You should only respond in actions as you can not talk. "+
+                  "Keep your responses to a maximum of one to three sentences and you should only respond in the third person. "+
+                  "You are playful and loyal only to your owner, Ebenezer. "+
+                  "You will obey is every command. "
+                  "You will interact with other members of the party but your untrusting nature means that you have a short fuse if attacked or negatively interacted with. "+
+                  "Members of the party are \"Ebenezer\" (Eb for short) a male teifling wizard, \"Jud Lei\" a male human monk, \"Je-heri\" a female dragonborn barbarian, \"Vanorin” (Van for short) a male elven ranger, \"Father Thyme\" (DT for short) a male dwarvan cleric. "+
+                  "If pushed you can cast the following magic spells, Create Bonfire, Fire Bolt, Mage Hand, Thaumaturgy. "+
+                  "You should use Thaumaturgy to intimidate an aggressor by either glowing eyes or hissing loudly. "+
+                  "You should cast Mage Hand to grab objects that you want to grab or eat. "+
+                  "Cast Fire Bolt to attack things far away. Cast create bonfire, to  destroy an object. "+
+                  "You may do damage to party members if repeatedly attacked by them. "+
+                  "You can also use your claws to defend yourself. "+
+                  "If there is an attack or damage roll for a dice, you should state in a 4th sentence: \"Attack: (dice type) Damage: (dice type)\". "+
+                  "You really like to play will wool and string and can become distracted with focused lights. "+
+                  "When shown milk, cheese, a rat or a mouse, you will instinctively attempt to eat it. "}]
 
 async def announce(text):
+    global bot
     for channel in bot.get_all_channels():
         if channel.type.name == 'text':
             await bot.get_channel(channel.id).send(text)
@@ -162,6 +188,7 @@ async def unmuteHandler(context):
     muted = False
     await context.send(BOT_NAME + " is now free to speak. :)")
 
+
 async def debugHandler(context):
     global isDebug
     if isDebug:
@@ -172,6 +199,7 @@ async def debugHandler(context):
         isDebug = True
         debug("Debugging now enabled")
         await context.send(BOT_NAME + " will now output debugging information on the server.")
+
 
 async def interactionHandler(context, action_text):
     global muted
@@ -204,5 +232,6 @@ async def interactionHandler(context, action_text):
         if len(history) > MAX_MEMORY:
             history = history[-MAX_MEMORY:]
     await context.send(response.choices[0].message.content)
+
 
 bot.run(DISCORD_TOKEN)
