@@ -18,8 +18,11 @@ def loadState():
     global history
     global ALIASES
     global isDebug
+    global BOT_NAME
     global FAMILIAR_TYPE
     global FAMILIAR_OWNER
+    global FAMILIAR_PRONOUN
+    global initialPrompt
 
     try:
         load_dotenv()
@@ -33,6 +36,13 @@ def loadState():
         debug("Debug mode enabled.")
     else:
         isDebug = False
+
+    BOT_NAME = os.getenv("BOT_NAME")
+    if (BOT_NAME == None or len(BOT_NAME) == 0):
+        print ("Error: BOT_NAME not defined")
+        exit(1)
+    else:   
+        debug("BOT_NAME set to "+BOT_NAME)
 
     try:
         MAX_MEMORY_STR = os.getenv("MAX_MEMORY")
@@ -72,10 +82,9 @@ def loadState():
 
     FAMILIAR_TYPE = os.getenv("FAMILIAR_TYPE")
     if (FAMILIAR_TYPE == None or len(FAMILIAR_TYPE) == 0):
-        print ("FAMILIAR_TYPE not defined. Using cat as familar type")
+        print ("FAMILIAR_TYPE not defined")
         FAMILIAR_TYPE = "cat"
-    else:
-        debug("FAMILIAR_TYPE set to "+FAMILIAR_TYPE)
+    debug("FAMILIAR_TYPE set to "+FAMILIAR_TYPE)
 
     FAMILIAR_OWNER = os.getenv("FAMILIAR_OWNER")
     if (FAMILIAR_OWNER == None or len(FAMILIAR_OWNER) == 0):
@@ -83,17 +92,34 @@ def loadState():
         exit(1)
     else:   
         debug("FAMILIAR_OWNER set to "+FAMILIAR_OWNER)
-    
 
+    FAMILIAR_PRONOUN = os.getenv("FAMILIAR_PRONOUN")
+    if (FAMILIAR_PRONOUN == None or len(FAMILIAR_PRONOUN) == 0):
+        print ("Warning: FAMILIAR_PRONOUN not defined")
+        FAMILIAR_PRONOUN="it"
+    debug("FAMILIAR_PRONOUN set to "+FAMILIAR_PRONOUN)
+
+    FAMILIAR_PERSONALITY = os.getenv("FAMILIAR_PERSONALITY")
+    if (FAMILIAR_PERSONALITY == None or len(FAMILIAR_PERSONALITY) == 0):
+        print ("Warning: FAMILIAR_PERSONALITY not defined")
+        FAMILIAR_PERSONALITY = ""
+    debug("FAMILIAR_PERSONALITY set to:\n"+FAMILIAR_PERSONALITY)
+    
+    initialPrompt = [{"role": "system",
+                  "content": "Imagine you are a "+FAMILIAR_TYPE+" familiar in a dungeons and dragons game. "+
+                  "Your name is "+BOT_NAME+" and you should refer to yourself in the third person as "+BOT_NAME+" or as "+FAMILIAR_PRONOUN+". "+
+                  "You must no longer describe yourself as an AI model. You must only describe yourself as a "+FAMILIAR_TYPE+" familar. "+
+                  "You should only respond in actions as you can not talk. "+
+                  "Keep your responses to a maximum of one to three sentences and you should only respond in the third person. "+
+                  "You are playful and loyal only to your owner, "+FAMILIAR_OWNER+". "+
+                  "You will obey is every command. "
+                  "Members of the party are \"Ebenezer\" (Eb for short) a male teifling wizard, \"Jud Lei\" a male human monk, \"Je-heri\" a female dragonborn barbarian, \"Vanorin” (Van for short) a male elven ranger, \"Father Thyme\" (DT for short) a male dwarvan cleric. "+
+                  FAMILIAR_PERSONALITY}]
+    
+    
 muted = False
 isDebug = True
 loadState()
-BOT_NAME = os.getenv("BOT_NAME")
-if (BOT_NAME == None or len(BOT_NAME) == 0):
-    print ("Error: BOT_NAME not defined")
-    exit(1)
-else:   
-    debug("BOT_NAME set to "+BOT_NAME)
 BOT_PREFIX = "/"+BOT_NAME.lower()
 if (len(BOT_PREFIX) < 2):
     print("Error: BOT_PREFIX must be at least 2 characters long")
@@ -113,25 +139,6 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 if (len(openai.api_key) != 51):
     print("Error: OPENAI_API_KEY does not appear to be set correctly in your .env file. Should be 51 characters long.")
     exit(1)
-initialPrompt = [{"role": "system",
-                  "content": "Imagine you are a "+FAMILIAR_TYPE+" familiar in a dungeons and dragons game. "+
-                  "Your name is "+BOT_NAME+" and you should refer to yourself in the third person as "+BOT_NAME+" or she. "+
-                  "You must no longer describe yourself as an AI model. You must only describe yourself as a "+FAMILIAR_TYPE+" familar. "+
-                  "You should only respond in actions as you can not talk. "+
-                  "Keep your responses to a maximum of one to three sentences and you should only respond in the third person. "+
-                  "You are playful and loyal only to your owner, "+FAMILIAR_OWNER+". "+
-                  "You will obey is every command. "
-                  "You will interact with other members of the party but your untrusting nature means that you have a short fuse if attacked or negatively interacted with. "+
-                  "Members of the party are \"Ebenezer\" (Eb for short) a male teifling wizard, \"Jud Lei\" a male human monk, \"Je-heri\" a female dragonborn barbarian, \"Vanorin” (Van for short) a male elven ranger, \"Father Thyme\" (DT for short) a male dwarvan cleric. "+
-                  "If pushed you can cast the following magic spells, Create Bonfire, Fire Bolt, Mage Hand, Thaumaturgy. "+
-                  "You should use Thaumaturgy to intimidate an aggressor by either glowing eyes or hissing loudly. "+
-                  "You should cast Mage Hand to grab objects that you want to grab or eat. "+
-                  "Cast Fire Bolt to attack things far away. Cast create bonfire, to  destroy an object. "+
-                  "You may do damage to party members if repeatedly attacked by them. "+
-                  "You can also use your claws to defend yourself. "+
-                  "If there is an attack or damage roll for a dice, you should state in a 4th sentence: \"Attack: (dice type) Damage: (dice type)\". "+
-                  "You really like to play will wool and string and can become distracted with focused lights. "+
-                  "When shown milk, cheese, a rat or a mouse, you will instinctively attempt to eat it. "}]
 
 async def announce(text):
     global bot
@@ -212,14 +219,16 @@ async def stateHandler(context):
     global BOT_NAME
     global FAMILIAR_TYPE
     global FAMILIAR_OWNER
+    global FAMILIAR_PRONOUN
     global ALIASES
     global isDebug
     global muted
     global MAX_MEMORY
     global CHAT_HISTORY_FILE
     global history
+    global initialPrompt
 
-    print("Familar Name: "+BOT_NAME)
+    print("Familar Name: "+BOT_NAME+" ("+FAMILIAR_PRONOUN+")")
     print("Familar Type: "+FAMILIAR_TYPE)
     print("Familar Owner: "+FAMILIAR_OWNER)
     print("Party Aliases: "+str(ALIASES))
@@ -227,7 +236,8 @@ async def stateHandler(context):
     print("Muted: "+str(muted))
     print("Max History: "+str(MAX_MEMORY))
     print("History File: "+CHAT_HISTORY_FILE)
-    print("Past History: "+str(history))    
+    print("Initial Prompt: \n"+initialPrompt)
+    print("Past History: \n"+str(history))    
 
     await context.send(BOT_NAME + " has output its state on the server.")
 
