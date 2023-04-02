@@ -19,6 +19,7 @@ def loadState():
     global ALIASES
     global isDebug
     global FAMILIAR_TYPE
+    global FAMILIAR_OWNER
 
     try:
         load_dotenv()
@@ -56,6 +57,7 @@ def loadState():
                 infile.close()
             except json.JSONDecodeError as exp:
                 print("Error could not parse chat history!\n"+exp.msg)
+
     ALIASES = os.getenv("ALIAS")
     if (ALIASES != None and len(ALIASES) > 0):
         try:
@@ -72,12 +74,26 @@ def loadState():
     if (FAMILIAR_TYPE == None or len(FAMILIAR_TYPE) == 0):
         print ("FAMILIAR_TYPE not defined. Using cat as familar type")
         FAMILIAR_TYPE = "cat"
+    else:
+        debug("FAMILIAR_TYPE set to "+FAMILIAR_TYPE)
+
+    FAMILIAR_OWNER = os.getenv("FAMILIAR_OWNER")
+    if (FAMILIAR_OWNER == None or len(FAMILIAR_OWNER) == 0):
+        print ("Error: FAMILIAR_OWNER not defined")
+        exit(1)
+    else:   
+        debug("FAMILIAR_OWNER set to "+FAMILIAR_OWNER)
     
 
 muted = False
 isDebug = True
 loadState()
 BOT_NAME = os.getenv("BOT_NAME")
+if (BOT_NAME == None or len(BOT_NAME) == 0):
+    print ("Error: BOT_NAME not defined")
+    exit(1)
+else:   
+    debug("BOT_NAME set to "+BOT_NAME)
 BOT_PREFIX = "/"+BOT_NAME.lower()
 if (len(BOT_PREFIX) < 2):
     print("Error: BOT_PREFIX must be at least 2 characters long")
@@ -103,7 +119,7 @@ initialPrompt = [{"role": "system",
                   "You must no longer describe yourself as an AI model. You must only describe yourself as a "+FAMILIAR_TYPE+" familar. "+
                   "You should only respond in actions as you can not talk. "+
                   "Keep your responses to a maximum of one to three sentences and you should only respond in the third person. "+
-                  "You are playful and loyal only to your owner, Ebenezer. "+
+                  "You are playful and loyal only to your owner, "+FAMILIAR_OWNER+". "+
                   "You will obey is every command. "
                   "You will interact with other members of the party but your untrusting nature means that you have a short fuse if attacked or negatively interacted with. "+
                   "Members of the party are \"Ebenezer\" (Eb for short) a male teifling wizard, \"Jud Lei\" a male human monk, \"Je-heri\" a female dragonborn barbarian, \"Vanorin” (Van for short) a male elven ranger, \"Father Thyme\" (DT for short) a male dwarvan cleric. "+
@@ -144,6 +160,8 @@ async def baseCmd(context, action_text):
             return await muteHandler(context)
         case "unmute":
             return await unmuteHandler(context)
+        case "state":
+            return await stateHandler(context)
         case "debug":
             return await debugHandler(context)
         case _:
@@ -157,6 +175,7 @@ async def helpHandler(context):
                        "    "+BOT_PREFIX+" reset: reset "+BOT_NAME+" to last saved state. Useful when starting a session or to undo negative interactions.\n"+
                        "    "+BOT_PREFIX+" mute: prevent "+BOT_NAME+" from responding to interactions\n"+
                        "    "+BOT_PREFIX+" unmute: allow "+BOT_NAME+" to responding to interactions\n"+
+                       "    "+BOT_PREFIX+" state: output the state of "+BOT_NAME+" on the server\n"+
                        "    "+BOT_PREFIX+" debug: toggle display debugging information on the server\n"+
                        "    "+BOT_PREFIX+" <interaction>: interact with "+BOT_NAME+"\n"+
                        "\n"+
@@ -187,6 +206,30 @@ async def unmuteHandler(context):
     global muted
     muted = False
     await context.send(BOT_NAME + " is now free to speak. :)")
+
+
+async def stateHandler(context):
+    global BOT_NAME
+    global FAMILIAR_TYPE
+    global FAMILIAR_OWNER
+    global ALIASES
+    global isDebug
+    global muted
+    global MAX_MEMORY
+    global CHAT_HISTORY_FILE
+    global history
+
+    print("Familar Name: "+BOT_NAME)
+    print("Familar Type: "+FAMILIAR_TYPE)
+    print("Familar Owner: "+FAMILIAR_OWNER)
+    print("Party Aliases: "+str(ALIASES))
+    print("Debug Mode: "+str(isDebug))
+    print("Muted: "+str(muted))
+    print("Max History: "+str(MAX_MEMORY))
+    print("History File: "+CHAT_HISTORY_FILE)
+    print("Past History: "+str(history))    
+
+    await context.send(BOT_NAME + " has output its state on the server.")
 
 
 async def debugHandler(context):
