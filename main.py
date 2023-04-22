@@ -2,6 +2,7 @@ import openai
 import discord
 from discord.ext import commands
 import os
+import sys
 from dotenv import load_dotenv
 import json
 
@@ -13,21 +14,27 @@ def debug(*args):
             print(item)
 
 def loadState():
+    global configFile
     global MAX_MEMORY
     global CHAT_HISTORY_FILE
     global history
     global ALIASES
     global isDebug
+    global isQuiet
     global BOT_NAME
     global FAMILIAR_TYPE
     global FAMILIAR_OWNER
     global FAMILIAR_PRONOUN
     global initialPrompt
 
+    if (not os.path.exists(configFile)):
+        print("Error: Could not find configuration file "+configFile)
+        exit(1)
+
     try:
-        load_dotenv()
+        load_dotenv(configFile)
     except FileNotFoundError:
-        print("Error: .env file not found. Please create one and try again.")
+        print("Error: Could not open configuration file "+configFile)
         exit(1)
 
     DEBUG = os.getenv("DEBUG")
@@ -43,6 +50,14 @@ def loadState():
         exit(1)
     else:   
         debug("BOT_NAME set to "+BOT_NAME)
+
+
+    QUIET = os.getenv("QUIET")
+    if (QUIET == "true" or QUIET == "True" or QUIET == "TRUE"):
+        isQuiet = True
+        debug(BOT_NAME+" will wonder into chat quietly.")
+    else:
+        isQuiet = False
 
     try:
         MAX_MEMORY_STR = os.getenv("MAX_MEMORY")
@@ -74,7 +89,7 @@ def loadState():
             ALIASES = json.loads(ALIASES)
             debug("Aliases loaded as:",ALIASES)
         except json.JSONDecodeError as exp:
-            print("Error could not parse aliases!\n"+exp.msg)
+            print("Error could not parse aliases definition!\n"+exp.msg)
             ALIASES = {}
     else: 
         debug("No aliases defined.")
@@ -103,22 +118,62 @@ def loadState():
     if (FAMILIAR_PERSONALITY == None or len(FAMILIAR_PERSONALITY) == 0):
         print ("Warning: FAMILIAR_PERSONALITY not defined")
         FAMILIAR_PERSONALITY = ""
+    else:
+        FAMILIAR_PERSONALITY = FAMILIAR_PERSONALITY.replace("\\n","")
     debug("FAMILIAR_PERSONALITY set to:\n"+FAMILIAR_PERSONALITY)
-    
+
+    PARTY = os.getenv("PARTY")
+    if (PARTY != None and len(PARTY) > 0):
+        try:
+            PARTY_MEMBERS = json.loads(PARTY)
+            debug("Party loaded as:",PARTY_MEMBERS)
+        except json.JSONDecodeError as exp:
+            print("Error could not parse party definition!\n"+exp.msg)
+            PARTY_MEMBERS = []
+    else: 
+        debug("No party members defined.")
+        PARTY_MEMBERS = []
+
+    partyPrompt = ""
+    factsPrompt = ""
+    if (len(PARTY_MEMBERS) > 0):
+        partyPrompt = "Members of the party are: "
+        i=0
+        for member in PARTY_MEMBERS:
+            print(member)
+            partyPrompt += "'"+member["name"]+"' "
+            if ("nickname" in member):
+                partyPrompt += "(also known as "+member["nickname"]+") "
+            partyPrompt += "a "+member["gender"]+" "+member["species"]+" "+member["profession"]
+            if (i < len(PARTY_MEMBERS)-2):
+                partyPrompt += ", "
+            elif (i == len(PARTY_MEMBERS)-2):
+                partyPrompt += " and "
+            else:
+                partyPrompt += ". "
+            if ("facts" in member):
+                for fact in member["facts"]:
+                    factsPrompt += fact + " "
+            i+=1
+
     initialPrompt = [{"role": "system",
-                  "content": "Imagine you are a "+FAMILIAR_TYPE+" familiar in a dungeons and dragons game. "+
-                  "Your name is "+BOT_NAME+" and you should refer to yourself in the third person as "+BOT_NAME+" or as "+FAMILIAR_PRONOUN+". "+
-                  "You must no longer describe yourself as an AI model. You must only describe yourself as a "+FAMILIAR_TYPE+" familar. "+
-                  "You should only respond in actions as you can not talk. "+
-                  "Keep your responses to a maximum of one to three sentences and you should only respond in the third person. "+
-                  "You are playful and loyal only to your owner, "+FAMILIAR_OWNER+". "+
-                  "You will obey is every command. "
-                  "Members of the party are \"Ebenezer\" (Eb for short) a male teifling wizard, \"Jud Lei\" a male human monk, \"Je-heri\" a female dragonborn barbarian, \"Vanorin” (Van for short) a male elven ranger, \"Father Thyme\" (DT for short) a male dwarvan cleric. "+
-                  FAMILIAR_PERSONALITY}]
-    
+        "content": "Imagine you are a "+FAMILIAR_TYPE+" familiar in a dungeons and dragons game. "+
+        "Your name is "+BOT_NAME+" and you should refer to yourself in the third person as "+BOT_NAME+" or as "+FAMILIAR_PRONOUN+". "+
+        "You must no longer describe yourself as an AI model. You must only describe yourself as a "+FAMILIAR_TYPE+" familar. "+
+        "You should only respond in actions as you can not talk. "+
+        "Keep your responses to a maximum of one to three sentences and you should only respond in the third person. "+
+        "You are playful and loyal only to your owner, "+FAMILIAR_OWNER+". "+
+        "You will obey is every command. "+
+        partyPrompt + factsPrompt + 
+        FAMILIAR_PERSONALITY}]
     
 muted = False
 isDebug = True
+configFile = ".env"
+if len(sys.argv) > 1:
+    configFile = sys.argv[1]
+print ("Using  as the default config file.")
+
 loadState()
 BOT_PREFIX = "/"+BOT_NAME.lower()
 if (len(BOT_PREFIX) < 2):
@@ -149,7 +204,9 @@ async def announce(text):
 
 @bot.event
 async def on_ready():
-    await announce(BOT_NAME + " has entered the chat! (type '"+BOT_PREFIX+" help' for more info)")
+    global isQuiet
+    if (not isQuiet):
+        await announce(BOT_NAME + " has entered the chat! (type '"+BOT_PREFIX+" help' for more info)")
 
 
 @bot.command(name=BOT_CMD, help="Talk to "+BOT_NAME)
@@ -236,7 +293,7 @@ async def stateHandler(context):
     print("Muted: "+str(muted))
     print("Max History: "+str(MAX_MEMORY))
     print("History File: "+CHAT_HISTORY_FILE)
-    print("Initial Prompt: \n"+initialPrompt)
+    print("Initial Prompt: \n"+str(initialPrompt))
     print("Past History: \n"+str(history))    
 
     await context.send(BOT_NAME + " has output its state on the server.")

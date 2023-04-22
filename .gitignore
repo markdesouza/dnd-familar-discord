@@ -1,4 +1,8 @@
 chat_history.json
+tinder.env
+tinder_chat_history.json
+timothy.env
+timothy_chat_history.json
 i# Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
 
