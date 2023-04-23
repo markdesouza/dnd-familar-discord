@@ -3,6 +3,7 @@ tinder.env
 tinder_chat_history.json
 timothy.env
 timothy_chat_history.json
+.DS_Store
 i# Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
 

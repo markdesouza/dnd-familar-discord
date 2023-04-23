@@ -6,6 +6,12 @@ import sys
 from dotenv import load_dotenv
 import json
 
+from boto3 import Session
+from botocore.exceptions import BotoCoreError, ClientError
+from contextlib import closing
+import tempfile
+
+
 def debug(*args):
     global isDebug
     if (isDebug):
@@ -26,6 +32,11 @@ def loadState():
     global FAMILIAR_OWNER
     global FAMILIAR_PRONOUN
     global initialPrompt
+    global TTS_ENABLED
+    global AWS_KEY
+    global AWS_SECRET
+    global AWS_REGION
+    global VOICE_ID
 
     if (not os.path.exists(configFile)):
         print("Error: Could not find configuration file "+configFile)
@@ -50,7 +61,6 @@ def loadState():
         exit(1)
     else:   
         debug("BOT_NAME set to "+BOT_NAME)
-
 
     QUIET = os.getenv("QUIET")
     if (QUIET == "true" or QUIET == "True" or QUIET == "TRUE"):
@@ -157,17 +167,37 @@ def loadState():
             i+=1
 
     initialPrompt = [{"role": "system",
-        "content": "Imagine you are a "+FAMILIAR_TYPE+" familiar in a dungeons and dragons game. "+
+        "content": "Imagine you are a "+FAMILIAR_TYPE+" in a dungeons and dragons game. "+
         "Your name is "+BOT_NAME+" and you should refer to yourself in the third person as "+BOT_NAME+" or as "+FAMILIAR_PRONOUN+". "+
-        "You must no longer describe yourself as an AI model. You must only describe yourself as a "+FAMILIAR_TYPE+" familar. "+
+        "You must no longer describe yourself as an AI model. You must only describe yourself as a "+FAMILIAR_TYPE+". "+
         "You should only respond in actions as you can not talk. "+
-        "Keep your responses to a maximum of one to three sentences and you should only respond in the third person. "+
-        "You are playful and loyal only to your owner, "+FAMILIAR_OWNER+". "+
-        "You will obey is every command. "+
+        "Keep your responses to a maximum of one to two sentences only. You should only respond in the third person. "+
         partyPrompt + factsPrompt + 
         FAMILIAR_PERSONALITY}]
     
+    TTS_ENABLED = True
+    AWS_KEY = os.getenv("AWS_KEY")
+    if (AWS_KEY == None or len(BOT_NAME) == 0):
+        TTS_ENABLED = False
+        print("Error: AWS_KEY not set. Text to speech will be disabled.")
+    if (TTS_ENABLED):
+        AWS_SECRET = os.getenv("AWS_SECRET")
+        if (AWS_SECRET == None or len(AWS_SECRET) == 0):
+            TTS_ENABLED = False
+            print("Error: AWS_SECRET not set. Text to speech will be disabled.")
+    if (TTS_ENABLED):
+        AWS_REGION = os.getenv("AWS_REGION")
+        if (AWS_REGION == None or len(AWS_REGION) == 0):
+            AWS_REGION = "ap-southeast-2"
+            debug("AWS_REGION not set. Defaulting to: ", AWS_REGION)
+    if (TTS_ENABLED):
+        VOICE_ID = os.getenv("VOICE_ID")
+        if (VOICE_ID == None or len(VOICE_ID) == 0):
+            VOICE_ID = "Kendra"
+            debug("VOICE_ID not set. Defaulting to: ", VOICE_ID)
+    
 muted = False
+freeze = False
 isDebug = True
 configFile = ".env"
 if len(sys.argv) > 1:
@@ -205,8 +235,55 @@ async def announce(text):
 @bot.event
 async def on_ready():
     global isQuiet
+    global bot
+    global TTS_ENABLED
     if (not isQuiet):
         await announce(BOT_NAME + " has entered the chat! (type '"+BOT_PREFIX+" help' for more info)")
+    if (TTS_ENABLED):
+        for channel in bot.get_all_channels():
+            if channel.type.name == 'voice':
+                await bot.get_channel(channel.id).connect()
+
+
+async def speak(context, message):
+    global AWS_KEY
+    global AWS_SECRET
+    global AWS_REGION
+    global VOICE_ID
+
+    try :
+        server = context.message.guild
+        voice_channel = server.voice_client
+
+        session = Session(aws_access_key_id=AWS_KEY,aws_secret_access_key=AWS_SECRET,region_name=AWS_REGION)
+        polly = session.client("polly",region_name=AWS_REGION)
+
+        try:
+            response = polly.synthesize_speech(Text=message, OutputFormat="mp3", VoiceId=VOICE_ID)
+        except (BotoCoreError, ClientError) as error:
+            print("Error: Could not request speech synthesis")
+            print(error)
+            return
+        
+        if "AudioStream" in response:
+            with closing(response["AudioStream"]) as stream:
+                fd, filename = tempfile.mkstemp(suffix=".mp3")
+                try:
+                    with open(fd, "wb") as file:
+                        file.write(stream.read())
+                except IOError as error:
+                    print("Error: Could not save speech synthesis")
+                    print(error)
+                    return
+        else:
+            print("Could not stream audio")
+            return
+
+        async with context.typing():
+            voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=lambda e: os.remove(filename))
+    except Exception as error:
+        print("Unknown error during speech synthesis")
+        print(error)
 
 
 @bot.command(name=BOT_CMD, help="Talk to "+BOT_NAME)
@@ -224,6 +301,12 @@ async def baseCmd(context, action_text):
             return await muteHandler(context)
         case "unmute":
             return await unmuteHandler(context)
+        case "sssh":
+            return await stopHandler(context)
+        case "freeze":
+            return await freezeHandler(context)
+        case "unfreeze":
+            return await unfreezeHandler(context)
         case "state":
             return await stateHandler(context)
         case "debug":
@@ -237,8 +320,11 @@ async def helpHandler(context):
                        "    "+BOT_PREFIX+" help: show this message\n"+
                        "    "+BOT_PREFIX+" save: save all interactions currently made with "+BOT_NAME+". Useful when ending a session.\n"+
                        "    "+BOT_PREFIX+" reset: reset "+BOT_NAME+" to last saved state. Useful when starting a session or to undo negative interactions.\n"+
-                       "    "+BOT_PREFIX+" mute: prevent "+BOT_NAME+" from responding to interactions\n"+
-                       "    "+BOT_PREFIX+" unmute: allow "+BOT_NAME+" to responding to interactions\n"+
+                       "    "+BOT_PREFIX+" mute: prevent "+BOT_NAME+" from speaking\n"+
+                       "    "+BOT_PREFIX+" unmute: allow "+BOT_NAME+" to speak\n"+
+                       "    "+BOT_PREFIX+" sssh: stop "+BOT_NAME+" from speaking\n"+
+                       "    "+BOT_PREFIX+" freeze: prevent "+BOT_NAME+" from responding to interactions\n"+
+                       "    "+BOT_PREFIX+" unfreeze: allow "+BOT_NAME+" to responding to interactions\n"+
                        "    "+BOT_PREFIX+" state: output the state of "+BOT_NAME+" on the server\n"+
                        "    "+BOT_PREFIX+" debug: toggle display debugging information on the server\n"+
                        "    "+BOT_PREFIX+" <interaction>: interact with "+BOT_NAME+"\n"+
@@ -272,6 +358,23 @@ async def unmuteHandler(context):
     await context.send(BOT_NAME + " is now free to speak. :)")
 
 
+async def freezeHandler(context):
+    global freeze
+    freeze = True
+    await context.send(BOT_NAME + " will now not respond to commands :(")
+
+
+async def unfreezeHandler(context):
+    global freeze
+    freeze = False
+    await context.send(BOT_NAME + " is now respond to commands. :)")
+
+
+async def stopHandler(context):
+    voice_client = context.message.guild.voice_client
+    if voice_client.is_playing():
+        await voice_client.stop()
+
 async def stateHandler(context):
     global BOT_NAME
     global FAMILIAR_TYPE
@@ -280,6 +383,7 @@ async def stateHandler(context):
     global ALIASES
     global isDebug
     global muted
+    global freeze
     global MAX_MEMORY
     global CHAT_HISTORY_FILE
     global history
@@ -291,6 +395,7 @@ async def stateHandler(context):
     print("Party Aliases: "+str(ALIASES))
     print("Debug Mode: "+str(isDebug))
     print("Muted: "+str(muted))
+    print("Frozen: "+str(freeze))
     print("Max History: "+str(MAX_MEMORY))
     print("History File: "+CHAT_HISTORY_FILE)
     print("Initial Prompt: \n"+str(initialPrompt))
@@ -312,11 +417,13 @@ async def debugHandler(context):
 
 
 async def interactionHandler(context, action_text):
+    global freeze
     global muted
     global history
     global ALIASES
+    global TTS_ENABLED
 
-    if muted:
+    if freeze:
         return
 
     action_text = " " + action_text
@@ -341,6 +448,8 @@ async def interactionHandler(context, action_text):
         
         if len(history) > MAX_MEMORY:
             history = history[-MAX_MEMORY:]
+        if (TTS_ENABLED and not muted):
+            await speak(context, response.choices[0].message.content)
     await context.send(response.choices[0].message.content)
 
 
